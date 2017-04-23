@@ -75,6 +75,20 @@ def setheaders():
 
 class Pjname:
     data = {}
+    def dumpj(self,compress=1):
+        separators=(",",":")if compress else None
+        indent = None if compress else 4
+        with open("./pjname.pickle","w") as f:
+            json.dump(self.data,f,separators=separators,indent=indent)
+    def loadj(self):
+        with open("./pjname.pickle") as f:
+            return json.load(f)
+    def dumpp(self):
+        with open("./pjname.json","wb") as f:
+            pickle.dump(self.data,f)
+    def loadp(self):
+        with open("./pjname.json","rb") as f:
+            return pickle.load(f)
     def detect(self):
         print("decting pjname")
         r = requests.get("http://www.boc.cn/sourcedb/whpj/")
@@ -88,6 +102,8 @@ class Pjname:
     def __init__(self):
         if not self.data:
             self.detect()
+            self.dumpj()
+            self.dumpp()
 
 class Date(DataLike):
     def __init__(self,data=""):
