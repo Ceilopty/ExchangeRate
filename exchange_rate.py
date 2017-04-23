@@ -78,16 +78,16 @@ class Pjname:
     def dumpj(self,compress=1):
         separators=(",",":")if compress else None
         indent = None if compress else 4
-        with open("./pjname.pickle","w") as f:
+        with open("./pjname.json","w") as f:
             json.dump(self.data,f,separators=separators,indent=indent)
     def loadj(self):
-        with open("./pjname.pickle") as f:
+        with open("./pjname.json") as f:
             return json.load(f)
     def dumpp(self):
-        with open("./pjname.json","wb") as f:
+        with open("./pjname.pickle","wb") as f:
             pickle.dump(self.data,f)
     def loadp(self):
-        with open("./pjname.json","rb") as f:
+        with open("./pjname.pickle","rb") as f:
             return pickle.load(f)
     def detect(self):
         print("decting pjname")
