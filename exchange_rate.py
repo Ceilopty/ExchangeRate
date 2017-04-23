@@ -212,6 +212,9 @@ class Rate:
     @property
     def path_p(self):
         return ospath.join(self.path,"%s.pickle"%self.cur)
+    @property
+    def path_c(self):
+        return ospath.join(self.path,"%s.csv"%self.cur)
     def __init__(self,cur="JPY"):
         self.pjname=Pjname(cur)
         self.cur=cur
@@ -284,7 +287,16 @@ class Rate:
         data=Rate.getRate(data=para)
         self.RecordCount=data[0]
         self.data.extend(data[1:])
-        if int(para["page"])<self.n_pages:pass
+        if int(para["page"])<self.n_pages:
+            time.sleep(0.1)
+            newpara=Para(para)
+            newpara["page"]=str(int(para["page"])+1)
+            print(newpara,self.n_pages)
+            self.get(newpara)
+    def dc(self):
+        with open(self.path_c,"w",encoding="utf-8") as f:
+            for line in self.data:
+                f.write(line.csv()+"\n")
 
 class Para(DictLike):
     pj = Pjname
@@ -308,6 +320,13 @@ class Para(DictLike):
 
 
 def main():
+    if 1:return
+    j=Rate()
+    a=Para(20170329,0,"JPY",1)
+    j.get(a)
+    j.dc()
+    j.dp()
+    j.dj()
     pass
 
 if __name__ == "__main__":
