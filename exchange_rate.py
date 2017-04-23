@@ -1,4 +1,9 @@
 #!/usr/bin/env python3.4
+__author__ = "Ceilopty"
+
+"""
+get exchange rate from www.BOC.cn
+"""
 
 from bs4 import BeautifulSoup
 import requests
@@ -7,11 +12,13 @@ import json
 import re
 import tkinter
 import pickle
+from os import path as ospath
 
 url = "http://srh.bankofchina.com/search/whpj/search.jsp"
-path="./data.json"
-path2="./data.pickle"
 
+"""
+path_j="./data.json"
+path_p="./data.pickle"
 def dump(obj,path,compress=1):
     separators=(",",":")if compress else None
     indent = None if compress else 4
@@ -27,6 +34,7 @@ def load(path):
 def load2(path):
     with open(path,"rb") as f:
         return pickle.load(f)
+"""
 
 class DataLike:
     def __repr__(self):
@@ -74,22 +82,37 @@ def setheaders():
     return headers.data
 
 class Pjname:
+    ins = None
+    pjn = ("英镑","港币","美元","瑞士法郎","新加坡元","瑞典克朗","丹麦克朗","挪威克朗",
+           "日元","加拿大元","澳大利亚元","欧元","印尼卢比","南非兰特","澳门元","菲律宾比索",
+           "泰铢","印度卢比","新西兰元","韩元","卢布","阿联酋迪拉姆","巴西里亚尔","沙特里亚尔",
+           "新台币","土耳其里拉","林吉特")
+    cur = ("GBP","HKD","USD","CHF","SGD","SEK","DKK","NOK","JPY","CAD","AUD","EUR",
+           "IDR","ZAR","MOP","PHP","THB","INR","NZD","KRW","RUB","AED","BRL","SAR",
+           "TWD","TRY","MYR",)
+    pjmap = dict(zip(cur,pjn))
+    pjmap_re = dict(zip(pjn,cur))
     data = {}
-    def dumpj(self,compress=1):
-        separators=(",",":")if compress else None
+    @classmethod
+    def dumpj(cls,compress=1):
+        separators=(",",":") if compress else None
         indent = None if compress else 4
-        with open("./pjname.json","w") as f:
-            json.dump(self.data,f,separators=separators,indent=indent)
-    def loadj(self):
-        with open("./pjname.json") as f:
+        with open(ospath.join(".","pjname.json"),"w") as f:
+            json.dump(cls.data,f,separators=separators,indent=indent)
+    @staticmethod
+    def loadj():
+        with open(ospath.join(".","pjname.json")) as f:
             return json.load(f)
-    def dumpp(self):
-        with open("./pjname.pickle","wb") as f:
-            pickle.dump(self.data,f)
-    def loadp(self):
-        with open("./pjname.pickle","rb") as f:
+    @classmethod
+    def dumpp(cls):
+        with open(ospath.join(".","pjname.pickle"),"wb") as f:
+            pickle.dump(cls.data,f)
+    @staticmethod
+    def loadp():
+        with open(ospath.join(".","pjname.pickle"),"rb") as f:
             return pickle.load(f)
-    def detect(self):
+    @classmethod
+    def detect(cls):
         print("decting pjname")
         r = requests.get("http://www.boc.cn/sourcedb/whpj/")
         r.close()
@@ -98,12 +121,20 @@ class Pjname:
         s = b.find("select",attrs={"id":"pjname"})
         o=s.findAll("option")
         for p in o:
-            self.data[p.text]=p["value"]
-    def __init__(self):
-        if not self.data:
-            self.detect()
-            self.dumpj()
-            self.dumpp()
+            cls.data[p.text]=p["value"]
+        cls.data.pop("选择货币")
+    def __new__(cls,data=None):
+        if not cls.ins:
+            cls.ins = super().__new__(cls)
+            if not cls.data:
+                try:
+                    cls.data=cls.loadp() or cls.loadj()
+                except:
+                    cls.detect()
+                    cls.dumpj()
+                    cls.dumpp()
+        if isinstance(data,int):data=str(data)
+        return cls.data.get(cls.pjmap.get(data,data),data if data in cls.data.values() else "1323")
 
 class Date(DataLike):
     def __init__(self,data=""):
@@ -118,24 +149,146 @@ class Date(DataLike):
             data = "%s-%d-%d"%(data//10000%9999 or today[:4],data%10000//100%13 or 1,data%100%32 or 1)
         self.data = data
 
+class RateDatum(tuple):
+    n_fields = 8
+    n_sequence_fields = 8
+    n_unnamed_fields = 0
+    def __new__(cls,*args):
+        import time
+        from collections import Iterable
+        if len(args) is not 1 or not isinstance(args[0],Iterable):
+            raise ValueError("")
+        args=[x for x in args[0]]
+        if len(args) is not 8 : raise IndexError("")
+        args[0] = Pjname.pjmap_re[args[0]]
+        args[7] = time.strptime(args[7],"%Y.%m.%d %H:%M:%S")
+        return super().__new__(cls,args)
+    @property
+    def cu(self):
+        "Currency Name."
+        return self[0]
+    @property
+    def b2(self):
+        "Bank Spot exchange buying price. Exchange bid rate."
+        return self[1]
+    @property
+    def b1(self):
+        "Bank Cash buying price. Cash bid rate."
+        return self[2]
+    @property
+    def a2(self):
+        "Bank Spot exchange selling price. Exchange ask rate."
+        return self[3]
+    @property
+    def a1(self):
+        "Bank Cash selling price. Cash ask rate."
+        return self[4]
+    @property
+    def ms(self):
+        "SAFE middle rate"
+        return self[5]
+    @property
+    def mb(self):
+        "BOC middle rate"
+        return self[6]
+    @property
+    def ti(self):
+        "Publish time"
+        return self[7]
+    def __str__(self):
+        import time
+        temp=tuple(x if x else "N/A" for x in self[:7])
+        return "RateData(%s %s %s %s %s %s %s %s)"%(temp+(time.strftime("%Y.%m.%d %H:%M:%S",self.ti),))
+    __repr__ = __str__
+    def csv(self):
+        return ",".join(self[:7])+",%s-%s-%s %s:%02d:%02d"%self[7][:6]
+
 class Rate:
-    def __init__(self):
-        self.pjname=1323
-        self.name="JPY"
+    #prefix_path
+    path = ospath.join(".","data")
+    @property
+    def path_j(self):
+        return ospath.join(self.path,"%s.json"%self.cur)
+    @property
+    def path_p(self):
+        return ospath.join(self.path,"%s.pickle"%self.cur)
+    def __init__(self,cur="JPY"):
+        self.pjname=Pjname(cur)
+        self.cur=cur
+        self.RecordCount=0
+        try:
+            data = self.lp(self.path_p) or self.lj(self.path_j)
+        except:
+            data = [0]
+        else:
+            print("Read data")
+        finally:
+            self.data = data
+    @staticmethod
+    def mod(num=0):return 1-(20-num)//20
+    def dj(self,compress=1):
+        try:
+            data = self.lj()
+        except:
+            obj = self.data
+        else:
+            obj,sub = list(data),list(self.data) if data[0]>self.data[0] else list(self.data),list(data)
+            for x in sub[1:]:
+                if not x in obj:
+                    obj.append(x)
+            obj[0] = len(obj)-1
+        finally:
+            separators=(",",":") if compress else None
+            indent = None if compress else 4
+            with open(self.path_j,"w") as f:
+                json.dump(obj,f,separators=separators,indent=indent)
+    def dp(self):
+        try:
+            data = self.lp()
+        except:
+            obj = self.data
+        else:
+            obj,sub = list(data),list(self.data) if data[0]>self.data[0] else list(self.data),list(data)
+            for x in sub[1:]:
+                if not x in obj:
+                    obj.append(x)
+            obj[0] = len(obj)-1
+        finally:
+            with open(self.path_p,"wb") as f:
+                pickle.dump(obj,f)
+    def lj(self):
+        with open(self.path_j) as f:
+            return json.load(f)
+    def lp(self):
+        with open(self.path_p,"rb") as f:
+            return pickle.load(f)
+    def get(self,para=None):
+        import time
+        
+    
 
 class Para(DictLike):
-    def __init__(self,data=None):
-        data = data or {"erectDate":Date().data,
-                        "nothing":Date().data,
-                        "pjname":"1323",
-                        "page":"1",
-                        }
+    pj = Pjname
+    def __init__(self,data=None,*args,**kw):
+        data = data or {}
+        ii = isinstance
+        if ii(data,dict):
+            kw.update(data)
+            data = {"erectDate":kw.get("erectDate",Date().data),
+                    "nothing":kw.get("nothing",Date().data),
+                    "pjname":Pjname(kw.get("pjname","1323")),
+                    "page":kw.get("page","1")}
+        if args:data=(data,)+args
+        if ii(data,Para):data=data.data
+        if ii(data,tuple):
+            data = {"erectDate":Date(data[0]).data,
+                    "nothing":Date(data[1]).data,
+                    "pjname":Pjname(data[2]),
+                    "page":data[3]}
         self.data = data
-            
 
 def getRate(url=url,data=None,headers=setheaders()):
-    import time
-    data = data or Para(data).data
+    data = Para(data).data
     r = requests.post(url,data=data,headers=headers)
     r.close()
     c = chardet.detect(r.content)['encoding']
@@ -143,19 +296,12 @@ def getRate(url=url,data=None,headers=setheaders()):
     d = b.find("div",class_="BOC_main publish")
     tb = d.find("tbody")
     tr = tb.findAll("tr")
-    data=[1-(20-int(re.findall("(?:m_nRecordCount = )(\d+)",r.content.decode(c))[0]))//20]
+    data=[int(re.findall("(?:m_nRecordCount = )(\d+)",r.content.decode(c))[0])]
     for tt in tr[1:]:
         td = tt.findAll("td")
         if not td:break
         if len(td) < 8: continue
-        data.append((td[0].text,
-                     float(td[1].text),
-                     float(td[2].text),
-                     float(td[3].text),
-                     float(td[4].text),
-                     float(td[5].text),
-                     float(td[6].text),
-                     time.strptime(td[7].text,"%Y.%m.%d %H:%M:%S")))
+        data.append(RateDatum(map(lambda x:x.text,td)))
     return tuple(data)
 
 def getBS(url):
