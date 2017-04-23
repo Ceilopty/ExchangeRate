@@ -219,24 +219,25 @@ class Rate:
         try:
             data = self.lp(self.path_p) or self.lj(self.path_j)
         except:
-            data = [0]
+            data = []
         else:
             print("Read data")
         finally:
             self.data = data
     @staticmethod
     def mod(num=0):return 1-(20-num)//20
+    @property
+    def n_pages(self):return self.mod(self.RecordCount)
     def dj(self,compress=1):
         try:
             data = self.lj()
         except:
             obj = self.data
         else:
-            obj,sub = list(data),list(self.data) if data[0]>self.data[0] else list(self.data),list(data)
-            for x in sub[1:]:
+            obj,sub = list(data),list(self.data) if len(data)>len(self.data) else list(self.data),list(data)
+            for x in sub:
                 if not x in obj:
                     obj.append(x)
-            obj[0] = len(obj)-1
         finally:
             separators=(",",":") if compress else None
             indent = None if compress else 4
@@ -248,11 +249,10 @@ class Rate:
         except:
             obj = self.data
         else:
-            obj,sub = list(data),list(self.data) if data[0]>self.data[0] else list(self.data),list(data)
-            for x in sub[1:]:
+            obj,sub = list(data),list(self.data) if len(data)>len(self.data) else list(self.data),list(data)
+            for x in sub:
                 if not x in obj:
                     obj.append(x)
-            obj[0] = len(obj)-1
         finally:
             with open(self.path_p,"wb") as f:
                 pickle.dump(obj,f)
@@ -262,10 +262,29 @@ class Rate:
     def lp(self):
         with open(self.path_p,"rb") as f:
             return pickle.load(f)
+    @staticmethod
+    def getRate(url=url,data=None,headers=setheaders()):
+        data = Para(data).data
+        r = requests.post(url,data=data,headers=headers)
+        r.close()
+        c = chardet.detect(r.content)['encoding']
+        b = BeautifulSoup(r.content,"html5lib",from_encoding=c)
+        d = b.find("div",class_="BOC_main publish")
+        tb = d.find("tbody")
+        tr = tb.findAll("tr")
+        data=[int(re.findall("(?:m_nRecordCount = )(\d+)",r.content.decode(c))[0])]
+        for tt in tr[1:]:
+            td = tt.findAll("td")
+            if not td:break
+            if len(td) < 8: continue
+            data.append(RateDatum(map(lambda x:x.text,td)))
+        return tuple(data)
     def get(self,para=None):
         import time
-        
-    
+        data=Rate.getRate(data=para)
+        self.RecordCount=data[0]
+        self.data.extend(data[1:])
+        if int(para["page"])<self.n_pages:pass
 
 class Para(DictLike):
     pj = Pjname
@@ -286,31 +305,6 @@ class Para(DictLike):
                     "pjname":Pjname(data[2]),
                     "page":data[3]}
         self.data = data
-
-def getRate(url=url,data=None,headers=setheaders()):
-    data = Para(data).data
-    r = requests.post(url,data=data,headers=headers)
-    r.close()
-    c = chardet.detect(r.content)['encoding']
-    b = BeautifulSoup(r.content,"html5lib",from_encoding=c)
-    d = b.find("div",class_="BOC_main publish")
-    tb = d.find("tbody")
-    tr = tb.findAll("tr")
-    data=[int(re.findall("(?:m_nRecordCount = )(\d+)",r.content.decode(c))[0])]
-    for tt in tr[1:]:
-        td = tt.findAll("td")
-        if not td:break
-        if len(td) < 8: continue
-        data.append(RateDatum(map(lambda x:x.text,td)))
-    return tuple(data)
-
-def getBS(url):
-    import time
-    time.sleep(0.1)
-    req = requests.get(url)
-    res = BeautifulSoup(req.content,"html5lib")
-    req.close()
-    return res
 
 
 def main():
